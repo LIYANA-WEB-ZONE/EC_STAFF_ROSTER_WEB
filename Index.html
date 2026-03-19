@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Duty Roster</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; padding: 10px; margin: 0; }
+        .roster-card { background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; max-width: 950px; margin: auto; border: 1px solid #ddd; }
+        
+        .header-container { background: #1a73e8; color: white; text-align: center; padding: 25px 15px; border-bottom: 2px solid #1557b0; }
+        
+        .main-title-row { margin-bottom: 25px; gap:3px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; } 
+        .main-title { font-size: 20px; font-weight: bold; padding-right: 15px; }
+        .month-header { font-size: 19px; opacity: 1; font-weight: bold; margin-left: 5px; color: #ffffff; }
+
+        .date-selector { margin-bottom: 15px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .date-input-wrapper { position: relative; display: inline-block; background: white; color: #333; padding: 6px 12px; border-radius: 5px; cursor: pointer; border: 1px solid #ccc; }
+        #startDatePicker { position: absolute; top: 0; left: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+        #displayDate { font-family: monospace; font-size: 15px; }
+
+        .legend-container { padding: 12px; background: rgba(255, 255, 255, 0.95); display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; font-size: 12px; border-radius: 8px; color: #333; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-weight: bold; }
+        .color-box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
+
+        table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+        th, td { border: 1px solid #eee; padding: 10px 2px; text-align: center; font-size: 13px; position: relative; }
+        
+        .name-col { text-align: left; font-weight: bold; width: 130px; background-color: #fcfcfc; padding-left: 10px; border-right: 2px solid #ddd; }
+        th.name-col { text-align: center !important; padding-left: 0 !important; }
+
+        .color-tr { color: #000000 !important; font-weight: bold; } 
+        .color-th { color: #0000FF !important; font-weight: bold; } 
+        .color-kh { color: #008000 !important; font-weight: bold; } 
+        .red-x { color: #d32f2f !important; font-weight: bold; }
+
+        .highlight-green { background-color: #81c784 !important; color: #000 !important; font-weight: bold; } 
+        .highlight-yellow { background-color: #ffca28 !important; color: #000 !important; font-weight: bold; } 
+
+        .today-mark { background-color: rgba(255, 249, 196, 0.7) !important; border-left: 3px solid #fbc02d !important; border-right: 3px solid #fbc02d !important; }
+        th.today-mark { background-color: #fbc02d !important; color: #000; font-weight: bold; }
+
+        .selected-mark { background-color: #e0e0e0 !important; border-left: 2px solid #9e9e9e !important; border-right: 2px solid #9e9e9e !important; }
+        th.selected-mark { background-color: #bdbdbd !important; color: #000; font-weight: bold; }
+
+        .summary-row { background-color: #f8f9fa; font-weight: bold; font-size: 11px; border-top: 2px solid #ccc; }
+        .sum-box { line-height: 1.3; padding: 4px 0; border-bottom: 1px dashed #ddd; }
+        
+        #loader { text-align: center; padding: 40px; color: #1a73e8; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="roster-card">
+    <div class="header-container">
+        <div class="main-title-row">
+            <span class="main-title">සේවක පැමිණීමේ නාමාවලිය</span>
+            <span id="currentMonth" class="month-header">....දිනය ලබා ගනිමින්....</span>
+        </div>
+
+        <div class="date-selector">
+            දිනය තෝරන්න: 
+            <div class="date-input-wrapper">
+                <span id="displayDate">0000/00/00</span>
+                <input type="date" id="startDatePicker" onchange="updateSelectedDate()">
+            </div>
+        </div>
+        
+        <div class="legend-container">
+            <div class="legend-item"><span style="color: #00f;">DN</span>: ශික්ෂණ රෝහල</div>
+            <div class="legend-item"><span style="color: #008000;">DN</span>: වෘක්කවේද රෝහල</div>
+            <div class="legend-item"><span style="color: #000;">DN</span>: විශේෂ සේවක (AB)</div>
+            <div class="legend-item"><span class="red-x">X</span>: සේවක නිවාඩු</div>
+            <div class="legend-item"><div class="color-box" style="background: #81c784;"></div> විශේෂ (A)</div>
+            <div class="legend-item"><div class="color-box" style="background: #ffca28;"></div> විශේෂ (B)</div>
+        </div>
+    </div>
+    
+    <div id="loader">දත්ත ලබා ගනිමින් පවතී...</div>
+    <table id="rosterTable" style="display: none;">
+        <thead><tr id="dateHeader"><th class="name-col">සේවකයා</th></tr></thead>
+        <tbody id="rosterData"></tbody>
+        <tfoot><tr id="summaryRow" class="summary-row"><td class="name-col" style="text-align: center;">එකතුව</td></tr></tfoot>
+    </table>
+</div>
+
+<script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbygiMh3Y2EaLJ9gnxq1nBs1ejzGy6d4FWp_-avnJWtbpPgyoEZfhQcHn3fz091wcqQU/exec";
+
+    window.onload = function() {
+        const today = new Date();
+        document.getElementById('startDatePicker').valueAsDate = today;
+        formatDisplayDate(today);
+        buildRoster();
+    };
+
+    function formatDisplayDate(date) {
+        const y = date.getFullYear();
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const d = date.getDate().toString().padStart(2, '0');
+        document.getElementById('displayDate').innerText = `${y}/${m}/${d}`;
+    }
+
+    function updateSelectedDate() {
+        const dateVal = document.getElementById('startDatePicker').value;
+        if(dateVal) {
+            formatDisplayDate(new Date(dateVal));
+            buildRoster();
+        }
+    }
+
+    async function buildRoster() {
+        try {
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('rosterTable').style.display = 'none';
+
+            const response = await fetch(WEB_APP_URL);
+            const rosterData = await response.json();
+            
+            let selectedDate = new Date(document.getElementById('startDatePicker').value);
+            let realToday = new Date();
+            
+            realToday.setHours(0,0,0,0);
+            selectedDate.setHours(0,0,0,0);
+            
+            // --- මෙන්න මෙතන තමයි වැඩේ තියෙන්නේ ---
+            // තෝරාගත් දිනය අද දවස නම්, offset 0 (අද සිට පටන් ගනී)
+            // නැත්නම් offset -2 (පරණ විදිහට දින 2ක් පිටුපසට පෙන්වයි)
+            let startOffset = (selectedDate.getTime() === realToday.getTime()) ? 0 : -2;
+            let totalDays = 7; 
+
+            let monthLabel = selectedDate.toLocaleDateString('si-LK', { year: 'numeric', month: 'long' });
+            document.getElementById('currentMonth').innerText = monthLabel + " මාසය";
+
+            const header = document.getElementById('dateHeader');
+            const body = document.getElementById('rosterData');
+            const summary = document.getElementById('summaryRow');
+            
+            header.innerHTML = '<th class="name-col">සේවකයා</th>';
+            body.innerHTML = '';
+            summary.innerHTML = '<td class="name-col" style="text-align: center;">එකතුව</td>';
+            
+            let dayList = [];
+            let daySummary = []; 
+
+            for (let i = 0; i < totalDays; i++) {
+                let tempDate = new Date(selectedDate);
+                tempDate.setDate(selectedDate.getDate() + startOffset + i);
+                tempDate.setHours(0,0,0,0);
+
+                let dateKey = tempDate.getDate().toString();
+                dayList.push({ key: dateKey, fullDate: new Date(tempDate) });
+                daySummary.push({ th: {d:0, n:0}, tr: {d:0, n:0}, kh: {d:0, n:0} });
+
+                let th = document.createElement('th');
+                th.innerText = dateKey.padStart(2, '0');
+                
+                if (tempDate.getTime() === realToday.getTime()) {
+                    th.classList.add('today-mark');
+                } else if (tempDate.getTime() === selectedDate.getTime()) {
+                    th.classList.add('selected-mark');
+                }
+                
+                header.appendChild(th);
+            }
+
+            rosterData.forEach(emp => {
+                let tr = document.createElement('tr');
+                let colorClass = (emp.type === "TH") ? "color-th" : (emp.type === "KH" ? "color-kh" : "color-tr");
+                let typeKey = (emp.type === "TH") ? "th" : (emp.type === "KH" ? "kh" : "tr");
+
+                let tdName = document.createElement('td');
+                tdName.className = 'name-col';
+                tdName.innerText = `${emp.id}. ${emp.name}`;
+                tr.appendChild(tdName);
+
+                dayList.forEach((dateObj, idx) => {
+                    let td = document.createElement('td');
+                    let shiftInput = (emp.shiftMap[dateObj.key] || "").toString().trim().toUpperCase();
+                    let finalHTML = "";
+                    
+                    if (dateObj.fullDate.getTime() === realToday.getTime()) {
+                        td.classList.add('today-mark');
+                    } else if (dateObj.fullDate.getTime() === selectedDate.getTime()) {
+                        td.classList.add('selected-mark');
+                    }
+
+                    let isSpecialH = shiftInput.includes("HD") || shiftInput === "HN";
+                    let isSpecialO = shiftInput.includes("OD") || shiftInput === "ON";
+
+                    if (isSpecialH) {
+                        td.classList.add('highlight-green');
+                        shiftInput = shiftInput.replace("H", "");
+                    } else if (isSpecialO) {
+                        td.classList.add('highlight-yellow');
+                        shiftInput = shiftInput.replace("O", "");
+                    } else if (shiftInput !== "" && shiftInput !== "X") {
+                        td.classList.add(colorClass);
+                    }
+
+                    if (shiftInput === "X") {
+                        finalHTML = `<span class="red-x">X</span>`;
+                    } else {
+                        for (let char of shiftInput) {
+                            if (char === "X") finalHTML += `<span class="red-x">X</span>`;
+                            else finalHTML += char;
+                        }
+                    }
+
+                    if (shiftInput.includes("D")) daySummary[idx][typeKey].d++;
+                    if (shiftInput.includes("N")) daySummary[idx][typeKey].n++;
+
+                    td.innerHTML = finalHTML;
+                    tr.appendChild(td);
+                });
+                body.appendChild(tr);
+            });
+
+            daySummary.forEach((counts, idx) => {
+                let td = document.createElement('td');
+                let colDate = dayList[idx].fullDate;
+                
+                if (colDate.getTime() === realToday.getTime()) {
+                    td.classList.add('today-mark');
+                } else if (colDate.getTime() === selectedDate.getTime()) {
+                    td.classList.add('selected-mark');
+                }
+
+                let content = "";
+                if (counts.th.d > 0 || counts.th.n > 0) content += `<div class="sum-box color-th">D:${counts.th.d} N:${counts.th.n}</div>`;
+                if (counts.tr.d > 0 || counts.tr.n > 0) content += `<div class="sum-box color-tr">D:${counts.tr.d} N:${counts.tr.n}</div>`;
+                if (counts.kh.d > 0 || counts.kh.n > 0) content += `<div class="sum-box color-kh">D:${counts.kh.d} N:${counts.kh.n}</div>`;
+                td.innerHTML = content || "-";
+                summary.appendChild(td);
+            });
+
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('rosterTable').style.display = 'table';
+
+        } catch (error) {
+            document.getElementById('loader').innerText = "දත්ත ලබා ගත නොහැක.";
+        }
+    }
+</script>
+</body>
+</html>
